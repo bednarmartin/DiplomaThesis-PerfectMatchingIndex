@@ -9,6 +9,7 @@
 #include "SATperfectmatching.h"
 #include "disjuction.h"
 #include <climits>
+#include "VF3.h"
 
 void doKempe();
 
@@ -20,11 +21,15 @@ void doTest(int argc, char *const *argv);
 
 void doConvert(char *const *argv);
 
-void poleTestWithoutSAT(Edge &edge1, Edge &edge2, Graph &graph, std::ofstream &outdata);
+void poleTestWithoutSAT(Edge &edge1, Edge &edge2, Graph &graph);
 
-void poleTestWithSAT(int numOfThreads, Edge &edge1, Edge &edge2, Graph &graph, std::ofstream &outdata);
+long long int poleTestWithSAT(Edge &edge1, Edge &edge2, Graph &graph);
 
-void processGraph(Graph &graph, std::ofstream &outdata, bool SAT, bool noDangling, int numOfThreads) {
+void doTestPole(int argc, char **argv);
+
+void doTestIsUnsatisfiable(int argc, char **argv);
+
+void processGraph(Graph &graph, std::ofstream &outdata, bool SAT, bool noDangling) {
     if (noDangling) {
         findPerfectMatchingSAT(graph);
         return;
@@ -35,9 +40,9 @@ void processGraph(Graph &graph, std::ofstream &outdata, bool SAT, bool noDanglin
             Edge edge2 = graph.edgesList[j];
             if (std::unordered_set{edge1.vertex1, edge1.vertex2, edge2.vertex1, edge2.vertex2}.size() == 4) {
                 if (SAT) {
-                    poleTestWithSAT(numOfThreads, edge1, edge2, graph, outdata);
+                    outdata << getRepresentant(poleTestWithSAT(edge1, edge2, graph)) << " - [" << edge1.vertex1 << " " << edge1.vertex2 << "],[" << edge2.vertex1 << " " << edge2.vertex2<< "]" << std::endl;
                 } else {
-                    poleTestWithoutSAT(edge1, edge2, graph, outdata);
+                    poleTestWithoutSAT(edge1, edge2, graph);
 
                 }
             }
@@ -45,25 +50,18 @@ void processGraph(Graph &graph, std::ofstream &outdata, bool SAT, bool noDanglin
     }
 }
 
-void poleTestWithSAT(int numOfThreads, Edge &edge1, Edge &edge2, Graph &graph, std::ofstream &outdata) {
-    long long int representation = findPerfectMatchingSATWithDanglingEdges(graph, edge1, edge2,
-                                                                           numOfThreads);
-    outdata << getRepresentant(representation);
-    outdata << " - [" << edge1.vertex1 << " " << edge1.vertex2 << "],[" << edge2.vertex1 << " "
-            << edge2.vertex2 << "]" << std::endl;
+long long int poleTestWithSAT(Edge &edge1, Edge &edge2, Graph &graph) {
+    return findPerfectMatchingSATWithDanglingEdges(graph, edge1, edge2, 2);
 }
 
-void poleTestWithoutSAT(Edge &edge1, Edge &edge2, Graph &graph, std::ofstream &outdata) {
+void poleTestWithoutSAT(Edge &edge1, Edge &edge2, Graph &graph) {
     perfectMatchings.clear();
     PoleMaker::make4Pole(graph, edge1, edge2);
     std::unordered_set<long long int> usedEdges;
     findPerfectMatching(graph, 0ll, usedEdges, getOnes(graph.numberOfVertices));
     std::vector<std::unordered_set<long long int>> usedPerfectMatches;
     determineCombinationsOfPerfectMatchings(graph);
-    outdata << getRepresentant(graph.combinations);
     PoleMaker::reverseMake4Pole(graph, edge1, edge2);
-    outdata << " - [" << edge1.vertex1 << " " << edge1.vertex2 << "],[" << edge2.vertex1 << " "
-            << edge2.vertex2 << "]" << std::endl;
 }
 
 bool isGood(long long int representation) {
@@ -106,18 +104,13 @@ void doTest(int argc, char *const *argv) {
     GraphReader graphReader = GraphReader(argv[2]);
     long long int counter = 1;
     std::ofstream outdata(argv[3]);
-    if (argc > 4) {
-        if (argv[4] == std::string("SAT")) {
-            noDangling = true;
-        }
-    }
     int threshold = 0;
     int end = INT_MAX;
 
-    /*if (argc >= 6) {
+    if (argc >= 6) {
         threshold = std::stoi(argv[4]);
         end = std::stoi(argv[5]);
-    }*/
+    }
 
     while (true) {
         Graph graph = graphReader.next();
@@ -129,8 +122,8 @@ void doTest(int argc, char *const *argv) {
         if (graph.hasBridge || counter < threshold) {
             std::cout << "HAS BRIDGE" << std::endl;
         } else {
-            outdata << "GRAPH " << counter << " - " << argv[1] << std::endl;
-            processGraph(graph, outdata, SAT, noDangling, numOfThreads);
+            outdata << "GRAPH " << counter << " - " << argv[2] << std::endl;
+            processGraph(graph, outdata, SAT, noDangling);
             outdata << std::endl;
         }
 
@@ -142,12 +135,13 @@ void doTest(int argc, char *const *argv) {
 }
 
 void doDisjunction(char *const *argv) {
+    std::ofstream outdata(argv[3]);
     std::vector<long long int> representants = getRepresentants(argv[2]);
     for (int i = 0; i < representants.size(); i++) {
         long long int representant1 = representants[i];
         for (int j = i + 1; j < representants.size(); j++) {
-            long long int representant2 = representants[j];
             bool was = false;
+            long long int representant2 = representants[j];
             for (int p1 = 0; p1 < 24; p1++) {
                 if (was) {
                     break;
@@ -159,16 +153,56 @@ void doDisjunction(char *const *argv) {
                     }
                     long long int newRepresentant2 = getPermutation(representant2, p2);
                     if ((newRepresentant1 & newRepresentant2) == 0) {
-                        std::cout << newRepresentant1 << " - " << newRepresentant2 << " FROM REPRESENTANTS: "
-                                  << representant1 << " AND " << representant2 << std::endl;
+                        outdata << representant1 << ": permutation = " << p1 << " making it: " << newRepresentant1
+                                << std::endl;
+                        std::vector<int> numbers = {1, 2, 3, 4};;
+                        getPermutation(numbers, 0, p1, outdata);
+                        counterToZero();
+                        outdata << representant2 << ": permutation = " << p2 << " making it: " << newRepresentant2
+                                << std::endl;
+                        std::vector<int> numbers2 = {1, 2, 3, 4};;
+                        getPermutation(numbers2, 0, p2, outdata);
+                        counterToZero();
                         was = true;
                     }
                 }
             }
         }
     }
+    outdata.close();
 }
 
+void doAutomaticAllDisjunctionPermutations(int argc, char **argv) {
+    for (int i = 1; i < argc; i++) {
+        std::cout << argv[i] << std::endl;
+    }
+    GraphReader graphReader1 = GraphReader(argv[2]);
+    GraphReader graphReader2 = GraphReader(argv[3]);
+
+    Graph graph1 = graphReader1.next();
+    Graph graph2 = graphReader2.next();
+
+    Edge edge1First = Edge(std::stoi(argv[4]), std::stoi(argv[5]));
+    Edge edge1Second = Edge(std::stoi(argv[6]), std::stoi(argv[7]));
+
+    Edge edge2First = Edge(std::stoi(argv[8]), std::stoi(argv[9]));
+    Edge edge2Second = Edge(std::stoi(argv[10]), std::stoi(argv[11]));
+
+    long long int representant1 = poleTestWithSAT(edge1First, edge1Second, graph1);
+    long long int representant2 = poleTestWithSAT(edge2First, edge2Second, graph2);
+
+
+    for (int p1 = 0; p1 < 24; p1++) {
+        long long int newRepresentant1 = getPermutation(representant1, p1);
+        for (int p2 = 0; p2 < 24; p2++) {
+            long long int newRepresentant2 = getPermutation(representant2, p2);
+            if ((newRepresentant1 & newRepresentant2) == 0) {
+
+            }
+        }
+
+    }
+}
 
 int main([[maybe_unused]] int argc, char **argv) {
     //runAllTests();
@@ -182,21 +216,49 @@ int main([[maybe_unused]] int argc, char **argv) {
         doKempe();
     } else if (argv[1] == std::string("representant_test")) {
         doRepresentantTest(argv);
-    } else if (argv[1] == std::string("disjuction")) {
+    } else if (argv[1] == std::string("disjunction")) {
         doDisjunction(argv);
     } else if (argv[1] == std::string("convert")) {
         doConvert(argv);
     } else if (argv[1] == std::string("test")) {
         doTest(argc, argv);
+    } else if (argv[1] == std::string("test_pole")) {
+        doTestPole(argc, argv);
+    } else if (argv[1] == std::string("automatic_all_disjunction_permutations")) {
+        doAutomaticAllDisjunctionPermutations(argc, argv);
+    } else if (argv[1] == std::string("test_is_unsatisfiable")) {
+        doTestIsUnsatisfiable(argc, argv);
+    } else if (argv[1] == std::string("test_isomorphism")) {
+        char *arguments[4] = {argv[0], argv[2], argv[3], NULL};
+        int result = isIsomorphic(4, arguments);
+        std::cout << result << std::endl;
     }
 
     deletePermutation();
 
     duration = (std::clock() - start) / (double) CLOCKS_PER_SEC;
-    std::cout << "Operation took " << duration << " seconds" <<
-              std::endl;
+    // std::cout << "Operation took " << duration << " seconds" << std::endl;
     return 0;
 }
+
+void doTestIsUnsatisfiable(int argc, char **argv) {
+    GraphReader graphReader = GraphReader(argv[2]);
+    Graph graph = graphReader.next();
+    findPerfectMatchingSAT(graph);
+
+}
+
+void doTestPole(int argc, char **argv) {
+    GraphReader graphReader = GraphReader(argv[2]);
+    Graph graph = graphReader.next();
+    Edge first = Edge(0, 8);
+    Edge second = Edge(10, 14);
+    std::ofstream outdata(argv[3]);
+    poleTestWithoutSAT(first, second, graph);
+}
+
+
+
 
 
 

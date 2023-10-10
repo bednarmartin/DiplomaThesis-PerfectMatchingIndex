@@ -1,25 +1,26 @@
+#include <fstream>
 #include "permutations.h"
 #include "4poles.hpp"
 
 int counter = 0;
 long long int **array;
 
-void getPermutation(std::vector<int> &numbers, int length, int permutation) {
+void getPermutation(std::vector<int> &numbers, int length, int permutation, std::ofstream &outdata) {
     if (length == 4) {
-        if(counter == permutation){
-            std::cout << "PERMUTATION " << permutation << " - " <<  numbers[0] << " " << numbers[1] << " " << numbers[2] << " " << numbers[3] << std::endl;
+        if (counter == permutation) {
+            outdata << numbers[0] << " " << numbers[1] << " " << numbers[2] << " " << numbers[3] << std::endl;
         }
         counter++;
     } else {
         for (int i = length; i <= 3; i++) {
             std::swap(numbers[length], numbers[i]);
-            getPermutation(numbers, length + 1, permutation);
+            getPermutation(numbers, length + 1, permutation, outdata);
             std::swap(numbers[length], numbers[i]);
         }
     }
 }
 
-void counterToZero(){
+void counterToZero() {
     counter = 0;
 }
 
@@ -51,7 +52,7 @@ long long int **initializePermutations() {
     return array;
 }
 
-void deletePermutation(){
+void deletePermutation() {
     for (int i = 0; i < 38; ++i) {
         delete[] array[i];
     }

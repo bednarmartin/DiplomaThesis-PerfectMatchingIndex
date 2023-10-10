@@ -27,6 +27,7 @@ THE SOFTWARE.
 #include <iostream>
 #include <utility>
 #include <string>
+#include <limits>
 #include <stdio.h>
 #include "solvertypesmini.h"
 
@@ -58,6 +59,7 @@ namespace CMSat {
         void new_vars(const size_t n); //and many new variables to the solver -- much faster
         unsigned nVars() const; //get number of variables inside the solver
         bool add_clause(const std::vector<Lit>& lits);
+        bool add_red_clause(const std::vector<Lit>& lits);
         bool add_xor_clause(const std::vector<unsigned>& vars, bool rhs);
         bool add_bnn_clause(
             const std::vector<Lit>& lits,
@@ -106,7 +108,7 @@ namespace CMSat {
          * Because the elapsed CPU time depends on both the number of
          * threads, and the activity of these threads, the elapsed time
          * can wildly differ from wall clock time.
-         * 
+         *
          * \pre max_time >= 0
          */
         void set_max_time(double max_time);
@@ -117,6 +119,7 @@ namespace CMSat {
          */
         void set_max_confl(uint64_t max_confl);
         void set_verbosity(unsigned verbosity = 0); //default is 0, silent
+        uint32_t get_verbosity() const;
         void set_verbosity_detach_warning(bool verb); //default is 0, silent
         void set_default_polarity(bool polarity); //default polarity when branching for all vars
         void set_polarity_mode(CMSat::PolarityMode mode); //set polarity type
@@ -127,8 +130,9 @@ namespace CMSat {
         void set_no_bva(); //No bounded variable addition
         void set_no_bve(); //No bounded variable elimination
         void set_bve(int bve);
+        void set_bve_too_large_resolvent(int too_large_resolvent);
         void set_greedy_undef(); //Try to set variables to l_Undef in solution
-        void set_sampling_vars(std::vector<uint32_t>* sampl_vars);
+        void set_sampling_vars(const std::vector<uint32_t>* sampl_vars);
         void set_timeout_all_calls(double secs); //max timeout on all subsequent solve() or simplify
         void set_up_for_scalmc(); //used to set the solver up for ScalMC configuration
         void set_up_for_arjun();
@@ -154,7 +158,10 @@ namespace CMSat {
         void set_weaken_time_limitM(const uint32_t lim);
         void set_occ_based_lit_rem_time_limitM(const uint32_t lim);
         void set_orig_global_timeout_multiplier(const double mult);
+        void set_oracle_get_learnts(bool val);
+        void set_oracle_removed_is_learnt(bool val);
         double get_orig_global_timeout_multiplier();
+        bool minimize_clause(std::vector<Lit>& cl);
 
         ////////////////////////////
         // Predictive system tuning
@@ -173,7 +180,7 @@ namespace CMSat {
         static const char* get_version(); //get solver version in string format
         static const char* get_version_sha1(); //get SHA1 version string of the solver
         static const char* get_compilation_env(); //get compilation environment string
-        std::string get_text_version_info();  //get printable version and copyright text
+        static std::string get_text_version_info();  //get printable version and copyright text
 
 
         ////////////////////////////
@@ -216,7 +223,7 @@ namespace CMSat {
         std::vector<OrGate> get_recovered_or_gates();
         std::vector<ITEGate> get_recovered_ite_gates();
         std::vector<uint32_t> remove_definable_by_irreg_gate(const std::vector<uint32_t>& vars);
-        void find_equiv_subformula(std::vector<uint32_t>& sampl_vars, std::vector<uint32_t>& empty_vars, const bool mirror);
+        void clean_sampl_and_get_empties(std::vector<uint32_t>& sampl_vars, std::vector<uint32_t>& empty_vars);
         std::vector<uint32_t> get_var_incidence();
         std::vector<uint32_t> get_lit_incidence();
         std::vector<uint32_t> get_var_incidence_also_red();
@@ -225,6 +232,7 @@ namespace CMSat {
         lbool find_fast_backw(FastBackwData fast_backw);
         void remove_and_clean_all();
         lbool probe(Lit l, uint32_t& min_props);
+        bool backbone_simpl(int64_t max_confl, bool cmsgen, bool& finished);
 
         //Given a set of literals to enqueue, returns:
         // 1) Whether they imply UNSAT. If "false": UNSAT
@@ -248,9 +256,16 @@ namespace CMSat {
         void get_all_irred_clauses(std::vector<Lit>& ret);
         const std::vector<BNN*>& get_bnns() const;
 
+        // Solution reconstruction after minimization
+        std::string serialize_solution_reconstruction_data() const;
+        static void* create_extend_solution_setup(std::string& data);
+        static std::pair<lbool, std::vector<lbool>> extend_solution(void* s, const std::vector<lbool>& simp_sol);
+        static void delete_extend_solution_setup(void* s);
+
         /////////////////////
         // Backwards compatibility, implemented using the above "small clauses" functions
         void open_file_and_dump_irred_clauses(const char* fname);
+        bool removed_var(uint32_t var) const;
 
     private:
 
@@ -260,4 +275,40 @@ namespace CMSat {
 
         CMSatPrivateData *data;
     };
+
+    template<class T, class T2>
+    void copy_solver_to_solver(T* solver, T2* solver2) {
+        solver2->new_vars(solver->nVars());
+        solver->start_getting_small_clauses(
+            std::numeric_limits<uint32_t>::max(),
+            std::numeric_limits<uint32_t>::max(),
+            false);
+        std::vector<Lit> clause;
+        bool ret = true;
+        while (ret) {
+            ret = solver->get_next_small_clause(clause);
+            if (!ret) break;
+            solver2->add_clause(clause);
+        }
+        solver->end_getting_small_clauses();
+    }
+
+    template<class T, class T2>
+    void copy_simp_solver_to_solver(T* solver, T2* solver2) {
+        solver2->new_vars(solver->simplified_nvars());
+        solver->start_getting_small_clauses(
+            std::numeric_limits<uint32_t>::max(),
+            std::numeric_limits<uint32_t>::max(),
+            false,
+            false,
+            true); //simplified
+        std::vector<Lit> clause;
+        bool ret = true;
+        while (ret) {
+            ret = solver->get_next_small_clause(clause);
+            if (!ret) break;
+            solver2->add_clause(clause);
+        }
+        solver->end_getting_small_clauses();
+    }
 }

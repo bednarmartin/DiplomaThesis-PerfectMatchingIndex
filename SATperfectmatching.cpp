@@ -135,8 +135,6 @@ long long int findPerfectMatchingSATWithDanglingEdges(Graph &graph, Edge edge1, 
         }
 
     }
-    std::cout << " - [" << edge1.vertex1 << " " << edge1.vertex2 << "],[" << edge2.vertex1 << " "
-              << edge2.vertex2 << "]" << " - " << representation << std::endl;
     return representation;
 
 
@@ -223,12 +221,24 @@ long long int findPerfectMatchingSAT(Graph &graph) {
     lbool ret = solver.solve();
     if (ret == l_True) {
         std::cout << "SATISFIABLE" << std::endl;
+        for (int j = 0; j < 4; j++) {
+            std::cout << j + 1 << ". PERFECT MATCHING COVER:" << std::endl;
+            for (int vertex = 0; vertex < graph.numberOfVertices; vertex++) {
+                std::cout << "VERTEX = " << vertex << std::endl;
+                Edge *outgoingEdges = graph.edges[vertex];
+                for (int i = 0; i < 3; i++) {
+                    Edge edge = outgoingEdges[i];
+                    std::cout << "[ " << edge.vertex1 << " " << edge.vertex2 << "] - ";
+                    long long int number = edges[edge] + j * offset;
+                    std::cout << solver.get_model()[number] << std::endl;
+                }
+            }
+        }
+        return 1ll;
     } else {
         std::cout << "UNSATISFIABLE" << std::endl;
+        return 0ll;
     }
-
-
-    return 0ll;
 
 
 }

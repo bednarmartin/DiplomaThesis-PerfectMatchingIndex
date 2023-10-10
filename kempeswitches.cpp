@@ -186,7 +186,7 @@ long long int getRepresentant(long long int representation) {
         /*if (new_representation == 274854811748) {
             std::cout << "TU SOM " << new_representation << std::endl;
             lowestSoFar = new_representation;
-            lowestperm = perm;
+            int lowestperm = perm;
             std::cout << "GOOD PERM = " << lowestperm << std::endl;
             std::vector<int> numbers = {0,1,2,3};
             counterToZero();

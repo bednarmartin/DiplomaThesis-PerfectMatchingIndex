@@ -49,13 +49,14 @@ class DimacsParser
         DimacsParser(S* solver, const std::string* debugLib, unsigned _verbosity);
 
         template <class T> bool parse_DIMACS(
-            T input_stream,
+            T input_stpeam,
             const bool strict_header,
             uint32_t offset_vars = 0);
         uint64_t max_var = numeric_limits<uint64_t>::max();
         vector<uint32_t> sampling_vars;
         bool sampling_vars_found = false;
         vector<double> weights;
+        uint32_t must_mult_exp2 = 0;
         const std::string dimacs_spec = "http://www.satcompetition.org/2009/format-benchmarks2009.html";
         const std::string please_read_dimacs = "\nPlease read DIMACS specification at http://www.satcompetition.org/2009/format-benchmarks2009.html";
 
@@ -72,9 +73,9 @@ class DimacsParser
         bool parseComments(C& in, const std::string& str);
         std::string stringify(uint32_t x) const;
         bool check_var(const uint32_t var);
+        bool parseWeight(C& in);
 
         #ifdef DEBUG_DIMACSPARSER_CMS
-        bool parseWeight(C& in);
         bool parse_solve_simp_comment(C& in, const bool solve);
         void write_solution_to_debuglib_file(const lbool ret) const;
         #endif
@@ -430,6 +431,34 @@ bool DimacsParser<C, S>::parseComments(C& in, const std::string& str)
         }
     } else
     #endif
+    if (str == "red") {
+        in.skipWhitespace();
+        lits.clear();
+        if (!readClause(in)) return false;
+        solver->add_red_clause(lits);
+    }
+    if (str == "MUST") {
+        std::string str2;
+        in.skipWhitespace();
+        in.parseString(str2);
+        if (str2 != "MULTIPLY") {
+            cout << "ERROR: expected 'MULTIPLY' after 'MUST'" << endl;
+            return false;
+        }
+        in.skipWhitespace();
+        in.parseString(str2);
+        if (str2 != "BY") {
+            cout << "ERROR: expected 'BY' after 'MUST MULTIPLY'" << endl;
+            return false;
+        }
+        in.skipWhitespace();
+        assert(*in == '2');++in;
+        assert(*in == '*');++in;
+        assert(*in == '*');++in;
+        if (!in.parseInt(must_mult_exp2, lineNum)) {
+            return false;
+        }
+    }
     if (!debugLib.empty() && str == "Solver::new_var()") {
         solver->new_var();
 
@@ -451,6 +480,18 @@ bool DimacsParser<C, S>::parseComments(C& in, const std::string& str)
         sampling_vars_found = true;
         if (!parseIndependentSet(in)) {
             return false;
+        }
+    } else if (str == "p") {
+        in.skipWhitespace();
+        std::string str2;
+        in.parseString(str2);
+        if (str2 == "show") {
+            in.skipWhitespace();
+            sampling_vars_found = true;
+            if (!parseIndependentSet(in)) { return false; }
+        } else {
+            cout << "ERROR, 'c p' followed by unknown text: '" << str2 << "'" << endl;
+            exit(-1);
         }
     } else {
         if (verbosity >= 6) {
